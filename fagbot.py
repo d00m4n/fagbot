@@ -1,6 +1,12 @@
 from pyfiglet import Figlet
-import urllib3
-
+import urllib3,io
+from os import system as System
+from os import rename as Move_file
+from os import makedirs as MakeDir
+from os import path as Path
+from datetime import datetime
+from datetime import date, timedelta
+import zipfile
 class bcolors:
     BLACK='\033[30m'
     GREY='\033[90m'
@@ -23,13 +29,13 @@ import argparse # command line parser
 parser = argparse.ArgumentParser(description='Fear and greed Bot')
 # parser = argparse.ArgumentParser(prog=(parser.prog).split(".")[0].capitalize())
 # //parser = argparse.ArgumentParser(epilog='Have fun.')
-parser.add_argument('-p','--profile', action='store',help='set alternate profile file',dest="profile")
-parser.add_argument('-t','--tweet', action='store',help='send a tweet',dest="tweet")
-parser.add_argument('-r','--retweet', action='store',help='retweet',dest="retweet")
-parser.add_argument('-q','--quote', action='store',help='quote a tweet',dest="quote")
-parser.add_argument('-l','--like  ', action='store',help='Like tweet',dest="like")
-parser.add_argument('-u','--unlike  ', action='store',help='Unike tweet',dest="unlike")
-parser.add_argument('-d','--debug', action='store_false',help='Enable debugging')
+# parser.add_argument('-p','--profile', action='store',help='set alternate profile file',dest="profile")
+# parser.add_argument('-t','--tweet', action='store',help='send a tweet',dest="tweet")
+# parser.add_argument('-r','--retweet', action='store',help='retweet',dest="retweet")
+# parser.add_argument('-q','--quote', action='store',help='quote a tweet',dest="quote")
+# parser.add_argument('-l','--like  ', action='store',help='Like tweet',dest="like")
+# parser.add_argument('-u','--unlike  ', action='store',help='Unike tweet',dest="unlike")
+parser.add_argument("-s","--silent", action='store_false',help='Hide messages')
 parser.add_argument('-n',"--no-banner", action='store_false',dest="nobanner")
 parser.add_argument('-v','--version', action='version', version=f'%(prog)s 1.0')
 args = parser.parse_args()
@@ -62,13 +68,13 @@ def string_between(string, start, end):
 # █
 # █
 # region get values from web
-def getWebValues():
+def getWebValues(limit=31):
     http = urllib3.PoolManager()
-    r = http.request('GET', 'https://api.alternative.me/fng/?limit=0&format=csv')
+    r = http.request('GET', f'https://api.alternative.me/fng/?limit={limit}&format=csv')
     values=(string_between(str(r.data).replace("\\n\\t",""),"[","]")).split("\\n")[2:]
     return values
 # endregion
-
+# Function : file_compress
 
 def getPercent(new,old):
     new=int(new)
@@ -108,16 +114,17 @@ def mediumfag(values,count):
             returncount += int(values[i].split(",")[1])
         return round(returncount/count)
 
-def getfag(values,returnvalue=""):
+def getfag(values,returnvalue=""): # get the results
     count=0
+    returnvalue=returnvalue.lower()
     if returnvalue == "" or returnvalue == "last":
         return values[0].split(",")[1]
-    elif returnvalue == "y":
+    elif returnvalue == "y" or returnvalue == "yesterday":
         return values[1].split(",")[1]
     elif returnvalue == "week":
         return mediumfag(values,7)
     elif returnvalue == "month":
-        return mediumfag(values,30)
+        return mediumfag(values,31)
     elif returnvalue == "fortnight":
         return mediumfag(values,15)
     else:
@@ -132,17 +139,99 @@ def getBanner(text,font='graffiti'):
     custom_fig = Figlet(font)
     print(bcolors.GREEN+custom_fig.renderText(text)+" "*32+"by dr_D00m4n"+bcolors.ENDC)
 # endregion
+def getFagPercent(values,days=1): # get % of the fear variation
+    # // todo get variation of diferent days
+    returnValue=0
+    newValue=int(values[0].split(",")[1])
+    oldValue=int(values[days].split(",")[1])
+    return getPercent(newValue,oldValue)
+    # for i in range(0,days+1):
+    #     returnValue += int(values[i].split(",")[1])
+    # return round(returnValue/(days+1))
+def _loadFile(file, format="none"):
+    try:
+        text_file = open(file, "r", encoding="utf-8")
+        if format == "raw":
+            lines = text_file.read()
+        else:
+            lines = text_file.read().splitlines()
+    except Exception as errorEx:
+        print(errorEx)
+        return False
+
+    return lines
+
+def _saveFile(file, text, raw=False):
+    with io.open(file, 'w', encoding='utf8') as txt_file:
+        if raw:
+            txt_file.write(str(text))
+        else:
+            for line in text:
+                # works with any number of elements in a line
+                txt_file.write(str(line) + "\n")
+
+
+
+def showfear(when="today"):
+    todayFile=datetime.today().strftime('%y%m%d')
+    yesterdayFile=(datetime.today() - timedelta(days=1)).strftime('%y%m%d')
+    if not Path.isfile(todayFile): # view if today file is still generated
+        if args.silent:
+            print(f'{bcolors.CYAN}Saving today file...{bcolors.ENDC}')
+
+        if Path.isfile(yesterdayFile): # check if there are previus version
+            MakeDir("history", exist_ok=True)
+            print("Backing up old file")
+            Move_file(yesterdayFile,"history/"+yesterdayFile)
+            
+        # Download values from web
+        webValues=getWebValues() # dowload weg values
+        fear=getfag(webValues)
+        yesterday=getfag(webValues,"yesterday")
+        week=getfag(webValues,"week")
+        fortnight=getfag(webValues,"fortnight")
+        month=getfag(webValues,"month")
+        percent=getFagPercent(webValues)
+        yesterdayPercent=getPercent(yesterday,fear)
+        weekPercent=getPercent(week,fear)
+        fortnightPercent=getPercent(fortnight,fear)
+        monthPercent=getPercent(month,fear)
+        _saveFile(todayFile,(fear,yesterday,week,fortnight,month))
+    else:
+        if args.silent:
+            print(f'{bcolors.CYAN}Loading saved data...{bcolors.ENDC}')
+        # ("Loading saved data")
+        # loadedFile=_loadFile(todayFile)
+        fear,yesterday,week,fortnight,month = _loadFile(todayFile)
+        percent=getPercent(fear,yesterday)
+        yesterdayPercent=getPercent(yesterday,fear)
+        weekPercent=getPercent(week,fear)
+        fortnightPercent=getPercent(fortnight,fear)
+        monthPercent=getPercent(month,fear)
+
+    if when=="today":
+        print(f'Today      : {fear} ({percent}) {getfear(fear)}' )
+    print(f'Yesterday  : {yesterday} ({yesterdayPercent}) {getfear(yesterday)}' )
+    print(f'Week       : {week} ({weekPercent}) {getfear(week)}' )
+    print(f'Fortnight  : {fortnight} ({fortnightPercent}) {getfear(fortnight)}' )
+    print(f'Month      : {month} ({monthPercent}) {getfear(month)}' )
+
 
 def main():
     if args.nobanner:
+        System("clear")
         getBanner((parser.prog).split(".")[0].capitalize())
-    fear=getfag(getWebValues())
-    # default output
-    print(fear+f' {getfear(fear)}')
+        print("\n")
+    if args.silent:
+        print(f'{bcolors.CYAN}Downloading data...{bcolors.ENDC}')
+    showfear()
+
     
 if __name__ == '__main__':
     main()
-exit()
+# print("import")
+# exit()
+
 
 # print( find_between_r( s, "[", "]" ))
 
@@ -153,20 +242,20 @@ exit()
 # # print(str(data).split("[")[1])
 # # print(getfag(values))
 # exit()
-value=getfag(values,28)
+# value=getfag(values,28)
 
-# exit()
-old_value=(values[1].split(",")[1])
-new_value=(values[0].split(",")[1])
-print(f'- Today: {bcolors.BOLD+bcolors.RED+new_value+bcolors.ENDC} ({getPercent(new_value,old_value)}) {getfear(new_value)}' )
+# # exit()
+# old_value=(values[1].split(",")[1])
+# new_value=(values[0].split(",")[1])
+# print(f'- Today: {bcolors.BOLD+bcolors.RED+new_value+bcolors.ENDC} ({getPercent(new_value,old_value)}) {getfear(new_value)}' )
 # print(f'- Today: {bcolors.BOLD+bcolors.RED+new_value+bcolors.ENDC} ({getPercent(new_value,old_value)}) {getfear(30)}' )
 # print(f'- Today: {bcolors.BOLD+bcolors.RED+new_value+bcolors.ENDC} ({getPercent(new_value,old_value)}) {getfear(49)}' )
 # print(f'- Today: {bcolors.BOLD+bcolors.RED+new_value+bcolors.ENDC} ({getPercent(new_value,old_value)}) {getfear(55)}' )
 # print(f'- Today: {bcolors.BOLD+bcolors.RED+new_value+bcolors.ENDC} ({getPercent(new_value,old_value)}) {getfear(85)}' )
-print("· 0 - 25   "+f'{getfear(0)}')
-print("· 26 - 46  "+f'{getfear(26)}')
-print("· 47 - 54  "+f'{getfear(47)}')
-print("· 55 - 75  "+f'{getfear(55)}')
-print("· 76 - 100 "+f'{getfear(76)}')
+# print("· 0 - 25   "+f'{getfear(0)}')
+# print("· 26 - 46  "+f'{getfear(26)}')
+# print("· 47 - 54  "+f'{getfear(47)}')
+# print("· 55 - 75  "+f'{getfear(55)}')
+# print("· 76 - 100 "+f'{getfear(76)}')
 
 
