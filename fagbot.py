@@ -176,12 +176,14 @@ def showfear(when="today"):
     todayFile=datetime.today().strftime('%y%m%d')
     yesterdayFile=(datetime.today() - timedelta(days=1)).strftime('%y%m%d')
     if not Path.isfile(todayFile): # view if today file is still generated
-        if args.silent:
+        if not args.silent:
             print(f'{bcolors.CYAN}Saving today file...{bcolors.ENDC}')
 
         if Path.isfile(yesterdayFile): # check if there are previus version
             MakeDir("history", exist_ok=True)
-            print("Backing up old file")
+            if not args.silent:
+              print(f'{bcolors.CYAN}Backing up old file...{bcolors.ENDC}')
+            # print("Backing up old file")
             Move_file(yesterdayFile,"history/"+yesterdayFile)
             
         # Download values from web
@@ -198,7 +200,7 @@ def showfear(when="today"):
         monthPercent=getPercent(month,fear)
         _saveFile(todayFile,(fear,yesterday,week,fortnight,month))
     else:
-        if args.silent:
+        if not args.silent:
             print(f'{bcolors.CYAN}Loading saved data...{bcolors.ENDC}')
         # ("Loading saved data")
         # loadedFile=_loadFile(todayFile)
